@@ -540,9 +540,9 @@ st.markdown("""
 This system analyzes both images and text from social media to identify disasters using deep learning models.
 It combines multiple state-of-the-art models for more accurate predictions:
 
-- **Image Models**: EfficientNetB3, DenseNet201, ResNet50
-- **Text Models**: BERT, XLNet
-- **Fusion Strategy**: Weighted ensemble of model predictions
+- **Image Models**: Advanced CNN architectures for visual analysis
+- **Text Models**: Transformer-based models for text understanding
+- **Fusion Strategy**: Smart ensemble of model predictions
 """)
 
 # Sidebar
@@ -718,8 +718,27 @@ if st.session_state.current_tab == "Demo":
             
             # Show which model contributed most
             st.subheader("Best Contributing Models")
-            st.write(f"Best Image Model: **{result['image_predictions']['best_model']}**")
-            st.write(f"Best Text Model: **{result['text_predictions']['best_model']}**")
+            
+            # Map model names to generic names
+            image_model_map = {
+                'EfficientNetB3': 'Model A',
+                'DenseNet201': 'Model B',
+                'ResNet50': 'Model C'
+            }
+            
+            text_model_map = {
+                'BERT': 'Model X',
+                'XLNet': 'Model Y'
+            }
+            
+            best_image = result['image_predictions']['best_model']
+            best_text = result['text_predictions']['best_model']
+            
+            generic_image = image_model_map.get(best_image, 'Image Model')
+            generic_text = text_model_map.get(best_text, 'Text Model')
+            
+            st.write(f"Best Image Model: **{generic_image}**")
+            st.write(f"Best Text Model: **{generic_text}**")
             
             # Add fusion method used
             st.write(f"Fusion Method: **{fusion_method}**")
@@ -733,10 +752,13 @@ if st.session_state.current_tab == "Demo":
             
             # Image model predictions chart
             image_data = []
-            for model in ['EfficientNetB3', 'DenseNet201', 'ResNet50']:
-                model_key = model.lower()
-                if model_key == 'efficientnetb3':
-                    model_key = 'efficientnet'
+            for model in ['Model A', 'Model B', 'Model C']:
+                model_map = {
+                    'Model A': 'efficientnet',
+                    'Model B': 'densenet',
+                    'Model C': 'resnet'
+                }
+                model_key = model_map.get(model, 'ensemble')
                 
                 probs = result['image_predictions'].get(model_key, [0] * len(categories))
                 for i, prob in enumerate(probs):
@@ -750,8 +772,14 @@ if st.session_state.current_tab == "Demo":
             
             # Text model predictions chart
             text_data = []
-            for model in ['BERT', 'XLNet']:
-                probs = result['text_predictions'].get(model.lower(), [0] * len(categories))
+            for model in ['Model X', 'Model Y']:
+                model_map = {
+                    'Model X': 'bert',
+                    'Model Y': 'xlnet'
+                }
+                model_key = model_map.get(model, 'ensemble')
+                
+                probs = result['text_predictions'].get(model_key, [0] * len(categories))
                 for i, prob in enumerate(probs):
                     text_data.append({
                         'Model': model,
