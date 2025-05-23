@@ -719,26 +719,8 @@ if st.session_state.current_tab == "Demo":
             # Show which model contributed most
             st.subheader("Best Contributing Models")
             
-            # Map model names to generic names
-            image_model_map = {
-                'EfficientNetB3': 'Model A',
-                'DenseNet201': 'Model B',
-                'ResNet50': 'Model C'
-            }
-            
-            text_model_map = {
-                'BERT': 'Model X',
-                'XLNet': 'Model Y'
-            }
-            
-            best_image = result['image_predictions']['best_model']
-            best_text = result['text_predictions']['best_model']
-            
-            generic_image = image_model_map.get(best_image, 'Image Model')
-            generic_text = text_model_map.get(best_text, 'Text Model')
-            
-            st.write(f"Best Image Model: **{generic_image}**")
-            st.write(f"Best Text Model: **{generic_text}**")
+            # Just show Fusion Method info but not specific models
+            st.write("Using multimodal analysis with image and text processing")
             
             # Add fusion method used
             st.write(f"Fusion Method: **{fusion_method}**")
@@ -750,50 +732,41 @@ if st.session_state.current_tab == "Demo":
             # Create prediction charts
             categories = ['Not Disaster', 'Disaster'] if binary_classification else ['Flood', 'Fire', 'Earthquake', 'Hurricane', 'Tornado', 'Not Disaster']
             
-            # Image model predictions chart
+            # Image analysis results chart
             image_data = []
-            for model in ['Model A', 'Model B', 'Model C']:
-                model_map = {
-                    'Model A': 'efficientnet',
-                    'Model B': 'densenet',
-                    'Model C': 'resnet'
-                }
-                model_key = model_map.get(model, 'ensemble')
-                
-                probs = result['image_predictions'].get(model_key, [0] * len(categories))
-                for i, prob in enumerate(probs):
-                    image_data.append({
-                        'Model': model,
-                        'Category': categories[i],
-                        'Probability': prob * 100
-                    })
+            # Combine all image results into a single result
+            image_ensemble = result['image_predictions'].get('ensemble', [0] * len(categories))
+            
+            # Create data for visualization without mentioning models
+            for i, prob in enumerate(image_ensemble):
+                image_data.append({
+                    'Analysis': 'Visual Analysis',
+                    'Category': categories[i],
+                    'Probability': prob * 100
+                })
             
             image_df = pd.DataFrame(image_data)
             
-            # Text model predictions chart
+            # Text analysis results chart
             text_data = []
-            for model in ['Model X', 'Model Y']:
-                model_map = {
-                    'Model X': 'bert',
-                    'Model Y': 'xlnet'
-                }
-                model_key = model_map.get(model, 'ensemble')
-                
-                probs = result['text_predictions'].get(model_key, [0] * len(categories))
-                for i, prob in enumerate(probs):
-                    text_data.append({
-                        'Model': model,
-                        'Category': categories[i],
-                        'Probability': prob * 100
-                    })
+            # Combine all text results into a single result
+            text_ensemble = result['text_predictions'].get('ensemble', [0] * len(categories))
+            
+            # Create data for visualization without mentioning models
+            for i, prob in enumerate(text_ensemble):
+                text_data.append({
+                    'Analysis': 'Text Analysis',
+                    'Category': categories[i],
+                    'Probability': prob * 100
+                })
             
             text_df = pd.DataFrame(text_data)
             
             # Display charts
-            st.write("**Image Model Predictions:**")
-            st.bar_chart(data=image_df, x='Category', y='Probability', color='Model')
-            st.write("**Text Model Predictions:**")
-            st.bar_chart(data=text_df, x='Category', y='Probability', color='Model')
+            st.write("**Visual Analysis Results:**")
+            st.bar_chart(data=image_df, x='Category', y='Probability', color='Analysis')
+            st.write("**Text Analysis Results:**")
+            st.bar_chart(data=text_df, x='Category', y='Probability', color='Analysis')
     
     # Display prediction history
     if st.session_state.demo_history:
