@@ -13,9 +13,82 @@ from io import BytesIO
 import random
 import re
 import plotly.express as px
+import psycopg2
+import psycopg2.extras
+from urllib.parse import urlparse
 
 # Import custom data module
 from data.sample_data import get_sample_dataset, get_sample_demo_data
+
+# Database connection function
+def get_db_connection():
+    """Create a connection to the PostgreSQL database"""
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get('PGHOST'),
+            database=os.environ.get('PGDATABASE'),
+            user=os.environ.get('PGUSER'),
+            password=os.environ.get('PGPASSWORD'),
+            port=os.environ.get('PGPORT')
+        )
+        return conn
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        return None
+
+# Save prediction to database
+def save_prediction(image_source, text_content, predicted_category, confidence, 
+                   fusion_method, best_image_model, best_text_model):
+    """Save prediction results to the database"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            with conn.cursor() as cur:
+                query = """
+                INSERT INTO disaster_predictions 
+                (image_source, text_content, predicted_category, confidence, 
+                fusion_method, best_image_model, best_text_model)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
+                """
+                cur.execute(query, (
+                    image_source,
+                    text_content,
+                    predicted_category,
+                    confidence,
+                    fusion_method,
+                    best_image_model,
+                    best_text_model
+                ))
+                prediction_id = cur.fetchone()[0]
+                conn.commit()
+                return prediction_id
+        except Exception as e:
+            st.error(f"Error saving to database: {e}")
+        finally:
+            conn.close()
+    return None
+
+# Get prediction history from database
+def get_prediction_history(limit=10):
+    """Retrieve the last N predictions from the database"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                query = """
+                SELECT * FROM disaster_predictions 
+                ORDER BY created_at DESC 
+                LIMIT %s;
+                """
+                cur.execute(query, (limit,))
+                results = [dict(row) for row in cur.fetchall()]
+                return results
+        except Exception as e:
+            st.error(f"Error retrieving from database: {e}")
+        finally:
+            conn.close()
+    return []
 
 # Set page configuration
 st.set_page_config(
@@ -474,7 +547,7 @@ It combines multiple state-of-the-art models for more accurate predictions:
 
 # Sidebar
 st.sidebar.title("Navigation")
-tab_options = ["Demo", "Model Evaluation", "Methodology", "About"]
+tab_options = ["Demo", "Model Evaluation", "Database Records", "Methodology", "About"]
 selected_tab = st.sidebar.radio("Select a tab:", tab_options)
 st.session_state.current_tab = selected_tab
 
@@ -591,6 +664,30 @@ if st.session_state.current_tab == "Demo":
                     'result': result,
                     'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
                 })
+                
+                # Determine image source for db storage
+                if image_source == "URL":
+                    img_src = image_url
+                elif image_source == "Upload":
+                    img_src = "User uploaded image"
+                else:  # Sample Image
+                    img_src = image_url
+                
+                # Save prediction to database
+                try:
+                    prediction_id = save_prediction(
+                        image_source=img_src,
+                        text_content=text_input,
+                        predicted_category=result['category'],
+                        confidence=float(result['confidence']),
+                        fusion_method=fusion_method,
+                        best_image_model=result['image_predictions']['best_model'],
+                        best_text_model=result['text_predictions']['best_model']
+                    )
+                    if prediction_id:
+                        st.success(f"Prediction saved to database with ID: {prediction_id}")
+                except Exception as e:
+                    st.warning(f"Could not save prediction to database: {e}")
         else:
             st.error("Please provide both an image and text for analysis.")
     
@@ -853,6 +950,114 @@ elif st.session_state.current_tab == "Model Evaluation":
             st.write("#### Fusion Methods")
             fusion_perf = create_performance_matrix(metrics, fusion_methods)
             st.dataframe(fusion_perf, use_container_width=True)
+
+elif st.session_state.current_tab == "Database Records":
+    st.header("Prediction Database Records")
+    
+    # Fetch recent predictions from database
+    with st.spinner("Loading prediction history from database..."):
+        predictions = get_prediction_history(limit=20)
+    
+    if predictions:
+        st.success(f"Found {len(predictions)} prediction records in database")
+        
+        # Create a DataFrame for display
+        df = pd.DataFrame(predictions)
+        
+        # Format the dataframe for better display
+        display_df = df[['id', 'predicted_category', 'confidence', 'fusion_method', 
+                        'best_image_model', 'best_text_model', 'created_at']]
+        
+        # Format confidence as percentage
+        display_df['confidence'] = display_df['confidence'].apply(lambda x: f"{x*100:.2f}%")
+        
+        # Rename columns for better display
+        display_df = display_df.rename(columns={
+            'id': 'ID',
+            'predicted_category': 'Prediction',
+            'confidence': 'Confidence',
+            'fusion_method': 'Fusion Method',
+            'best_image_model': 'Best Image Model',
+            'best_text_model': 'Best Text Model',
+            'created_at': 'Timestamp'
+        })
+        
+        # Display table of predictions
+        st.dataframe(display_df, use_container_width=True)
+        
+        # Allow viewing full details of a selected prediction
+        selected_id = st.selectbox("Select a prediction to view details:", 
+                                  options=df['id'].tolist(),
+                                  format_func=lambda x: f"Prediction #{x}")
+        
+        if selected_id:
+            # Find the selected prediction
+            selected_pred = df[df['id'] == selected_id].iloc[0]
+            
+            st.subheader(f"Prediction #{selected_id} Details")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Prediction Results:**")
+                st.info(f"**Category:** {selected_pred['predicted_category']}")
+                st.progress(float(selected_pred['confidence']))
+                st.write(f"**Confidence:** {float(selected_pred['confidence'])*100:.2f}%")
+                st.write(f"**Fusion Method:** {selected_pred['fusion_method']}")
+                st.write(f"**Best Image Model:** {selected_pred['best_image_model']}")
+                st.write(f"**Best Text Model:** {selected_pred['best_text_model']}")
+                st.write(f"**Created:** {selected_pred['created_at']}")
+            
+            with col2:
+                st.markdown("**Input Data:**")
+                st.text_area("Text Input:", value=selected_pred['text_content'], height=150, disabled=True)
+                
+                # Display image if URL is available
+                if selected_pred['image_source'] and not selected_pred['image_source'].startswith("User uploaded"):
+                    try:
+                        img = load_image_from_url(selected_pred['image_source'])
+                        st.image(img, caption="Input Image", use_container_width=True)
+                    except:
+                        st.warning("Could not load image from the saved source.")
+                else:
+                    st.write("**Image:** User uploaded image (not stored)")
+    else:
+        st.warning("No prediction records found in the database. Try making some predictions in the Demo tab first!")
+        
+        # Add sample button
+        if st.button("Generate Sample Predictions"):
+            with st.spinner("Generating sample predictions..."):
+                # Generate some sample predictions and store them
+                sample_data = get_sample_demo_data()
+                
+                for i, row in sample_data.iterrows():
+                    # Load image
+                    try:
+                        image = load_image_from_url(row['image_url'])
+                        
+                        # Make prediction
+                        result = simulate_prediction(
+                            image, 
+                            row['tweet_text'], 
+                            fusion_method=random.choice(['weighted', 'simple', 'best_model', 'adaptive']), 
+                            binary_classification=True
+                        )
+                        
+                        # Save to database
+                        save_prediction(
+                            image_source=row['image_url'],
+                            text_content=row['tweet_text'],
+                            predicted_category=result['category'],
+                            confidence=float(result['confidence']),
+                            fusion_method=random.choice(['weighted', 'simple', 'best_model', 'adaptive']),
+                            best_image_model=result['image_predictions']['best_model'],
+                            best_text_model=result['text_predictions']['best_model']
+                        )
+                    except Exception as e:
+                        st.error(f"Error generating sample: {e}")
+                
+                st.success("Sample predictions generated! Refresh this page to see them.")
+                st.experimental_rerun()
 
 elif st.session_state.current_tab == "Methodology":
     st.header("System Methodology")
