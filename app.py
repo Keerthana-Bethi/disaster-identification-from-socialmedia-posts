@@ -13,8 +13,7 @@ from io import BytesIO
 import random
 import re
 import plotly.express as px
-import psycopg2
-import psycopg2.extras
+
 from urllib.parse import urlparse
 
 # Import custom data module
@@ -22,19 +21,7 @@ from data.sample_data import get_sample_dataset, get_sample_demo_data
 
 # Database connection function
 def get_db_connection():
-    """Create a connection to the PostgreSQL database"""
-    try:
-        conn = psycopg2.connect(
-            host=os.environ.get('PGHOST'),
-            database=os.environ.get('PGDATABASE'),
-            user=os.environ.get('PGUSER'),
-            password=os.environ.get('PGPASSWORD'),
-            port=os.environ.get('PGPORT')
-        )
-        return conn
-    except Exception as e:
-        st.error(f"Database connection error: {e}")
-        return None
+    return None
 
 # Save prediction to database
 def save_prediction(image_source, text_content, predicted_category, confidence, 
@@ -547,7 +534,7 @@ It combines multiple state-of-the-art models for more accurate predictions:
 
 # Sidebar
 st.sidebar.title("Navigation")
-tab_options = ["Demo", "Model Evaluation", "Database Records", "Methodology", "About"]
+tab_options = ["Demo", "Model Evaluation", "Methodology", "About"]
 selected_tab = st.sidebar.radio("Select a tab:", tab_options)
 st.session_state.current_tab = selected_tab
 
@@ -640,11 +627,12 @@ if st.session_state.current_tab == "Demo":
         )
     
     with col2:
-        binary_classification = st.toggle(
-            "Binary classification",
-            value=True,
-            help="If enabled, classify as 'Disaster' or 'Not Disaster'. If disabled, classify disaster type."
-        )
+        binary_classification = st.checkbox(
+    "Binary classification",
+    value=True,
+    help="If enabled, classify as 'Disaster' or 'Not Disaster'. If disabled, classify disaster type."
+)
+
     
     # Predict button
     if st.button("Analyze"):
@@ -713,7 +701,7 @@ if st.session_state.current_tab == "Demo":
                 result_color = "red"
             
             st.markdown(f"<h3 style='color: {result_color};'>{prediction_class}</h3>", unsafe_allow_html=True)
-            st.progress(confidence / 100)
+            st.progress(min(confidence / 100, 1.0))
             st.write(f"Confidence: {confidence:.2f}%")
             
             # Show which model contributed most
@@ -759,14 +747,19 @@ if st.session_state.current_tab == "Demo":
                     'Category': categories[i],
                     'Probability': prob * 100
                 })
+                text_df = pd.DataFrame(text_data)
+
+# Display charts
+                st.write("**Visual Analysis Results:**")
+                fig_image = px.bar(image_df, x='Category', y='Probability', color='Analysis')
+                st.plotly_chart(fig_image)
+
+                st.write("**Text Analysis Results:**")
+                fig_text = px.bar(text_df, x='Category', y='Probability', color='Analysis')
+                st.plotly_chart(fig_text)
+
             
-            text_df = pd.DataFrame(text_data)
-            
-            # Display charts
-            st.write("**Visual Analysis Results:**")
-            st.bar_chart(data=image_df, x='Category', y='Probability', color='Analysis')
-            st.write("**Text Analysis Results:**")
-            st.bar_chart(data=text_df, x='Category', y='Probability', color='Analysis')
+
     
     # Display prediction history
     if st.session_state.demo_history:
@@ -834,12 +827,12 @@ elif st.session_state.current_tab == "Model Evaluation":
         )
     
     with col2:
-        binary_mode = st.toggle(
-            "Binary classification",
-            value=True,
-            help="If enabled, evaluate on 'Disaster' vs 'Not Disaster'. If disabled, evaluate on disaster types."
-        )
-    
+        binary_mode = st.checkbox(
+        "Binary classification",
+        value=True,
+        help="If enabled, evaluate on 'Disaster' vs 'Not Disaster'. If disabled, evaluate on disaster types."
+    )
+
     # Evaluate models
     if st.button("Run Evaluation"):
         if not fusion_methods:
@@ -925,7 +918,8 @@ elif st.session_state.current_tab == "Model Evaluation":
             
             if fusion_data:
                 fusion_df = pd.DataFrame(fusion_data)
-                st.bar_chart(data=fusion_df, x='Method', y='Value', color='Metric')
+                fig = px.bar(fusion_df, x='Method', y='Value', color='Metric')
+                st.plotly_chart(fig)
             
             # Display fusion architecture
             st.write("### Fusion Model Architecture")
